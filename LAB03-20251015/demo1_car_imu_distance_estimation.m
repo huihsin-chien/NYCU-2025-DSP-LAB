@@ -1,4 +1,4 @@
-function [distances, segments, results] = imu_distance_estimation(data, Fs)
+function [distances, segments, results] = demo1_car_imu_distance_estimation(data, Fs)
 % IMU 直線距離估算 - 僅限 Y 軸 (第二欄)
 % 輸入:
 %   data - n×6 array [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
