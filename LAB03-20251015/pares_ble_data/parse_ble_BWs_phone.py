@@ -1,7 +1,8 @@
 import re
 
-input_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\LAB03-20251015\strait\square_3.txt"
-output_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\LAB03-20251015\strait\ble_processed_square_3.txt"
+input_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\LAB03-20251015\car_90cm\demo_car2.txt"
+# input_file2 = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\LAB03-20251015\car_90cm\demo_car2.txt"
+output_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\LAB03-20251015\car_90cm\ble_processed_demo_car2.txt"
 
 # 改成允許前面有任意文字（.*?），抓雙引號中的 hex 字串
 pattern = re.compile(r'.*?"([0-9A-Fa-f ]+)"\s*value received')

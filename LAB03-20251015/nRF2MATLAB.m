@@ -1,4 +1,4 @@
-filename = './strait/ble_processed_square_3.txt';
+filename = './car_90cm/ble_processed_demo_car2.txt';
 
 % 讀取檔案所有行
 lines = readlines(filename);
