@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-
+from scipy.signal import find_peaks
 def find_closest_receive_after_emit(emit_times, receive_times, max_diff=1250):
     res = []
     j = 0
@@ -42,9 +42,18 @@ print(f"有效時間差數量: {len(valid_diffs)}")
 print(f"時間差最大值: {valid_diffs.max()}")
 print(f"時間差最小值: {valid_diffs.min()}")
 
+
+
+counts, bin_edges = np.histogram(valid_diffs, bins=500)
+peaks = find_peaks(counts, height=6000)[0]
+print(f"找到的峰值位置: {bin_edges[peaks]}")
+distance = bin_edges[peaks] / 2 * 3e8 / 1e10  # 單位: 公尺
+print(f"距離(峰值): {distance} 公尺")
+
+
 # 畫 histogram
 plt.figure(figsize=(8,5))
-plt.hist(valid_diffs, bins=50, color='skyblue', edgecolor='black')
+plt.hist(valid_diffs, bins=500, color='skyblue', edgecolor='black')
 plt.title('Histogram of time differences (receive - emit)')
 plt.xlabel('Time difference')
 plt.ylabel('Count')
