@@ -1,7 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.signal import find_peaks
+
 def find_closest_receive_after_emit(emit_times, receive_times, max_diff=1250):
     res = []
     j = 0
@@ -21,41 +21,52 @@ def find_closest_receive_after_emit(emit_times, receive_times, max_diff=1250):
     return np.array(res)
 
 # --- 主程式 ---
-emit_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\Lab4\DSPLAB04\part2\part2_emit_times_ps.csv"       # 發射檔名
-receive_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\Lab4\DSPLAB04\part2\part2_receive_times_ps.csv" # 接收檔名
+emit_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\Lab4\DSPLAB04\part2\part2_emit_times_ps.csv"
+receive_file = r"C:\Users\jianh\OneDrive\Documents\大學\三上\DSP lab\Lab4\DSPLAB04\part2\part2_receive_times_ps.csv"
 
-
-# 讀取csv，第0欄當作timestamp
 df_emit = pd.read_csv(emit_file, header=None)
 df_receive = pd.read_csv(receive_file, header=None)
 
-# 取第0欄數值並排序
 emit_times = np.sort(df_emit.iloc[:, 0].values)
 receive_times = np.sort(df_receive.iloc[:, 0].values)
 
-# 找最近的符合條件時間差
 diffs = find_closest_receive_after_emit(emit_times, receive_times, max_diff=1250)
-
 valid_diffs = diffs[~np.isnan(diffs)]
 
-print(f"有效時間差數量: {len(valid_diffs)}")
-print(f"時間差最大值: {valid_diffs.max()}")
-print(f"時間差最小值: {valid_diffs.min()}")
-
-
-
+# 建立 histogram
 counts, bin_edges = np.histogram(valid_diffs, bins=500)
-peaks = find_peaks(counts, height=6000)[0]
-print(f"找到的峰值位置: {bin_edges[peaks]}")
-distance = bin_edges[peaks] / 2 * 3e8 / 1e10  # 單位: 公尺
-print(f"距離(峰值): {distance} 公尺")
+bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
+# --- 滑動視窗掃描 ---
+window_size = 10  # 你可以調整視窗大小
+best_sum = 0
+best_centroid = None
 
-# 畫 histogram
-plt.figure(figsize=(8,5))
-plt.hist(valid_diffs, bins=500, color='skyblue', edgecolor='black')
-plt.title('Histogram of time differences (receive - emit)')
-plt.xlabel('Time difference')
+for i in range(len(counts) - window_size + 1):
+    window_counts = counts[i:i + window_size]
+    window_bins = bin_centers[i:i + window_size]
+    total = np.sum(window_counts)
+    if total > best_sum:
+        # 計算該 window 的質心 (weighted average)
+        centroid = np.sum(window_bins * window_counts) / total
+        best_sum = total
+        best_centroid = centroid
+
+print(f"最佳視窗總count = {best_sum}")
+print(f"對應質心時間差 = {best_centroid:.3f} ps")
+
+# --- 計算距離 ---
+# 光速 c = 3e8 m/s = 0.3 m/ns = 0.0003 m/ps
+distance_m = 0.015 * best_centroid  # 除以2, 光走去回
+print(f"估計物體距離 = {distance_m:.3f} 公尺")
+
+# --- 畫圖 ---
+plt.figure(figsize=(10,6))
+plt.bar(bin_centers, counts, width=bin_edges[1]-bin_edges[0], color='skyblue', edgecolor='black')
+plt.axvline(best_centroid, color='red', linestyle='--', label=f'Estimated peak: {best_centroid:.1f} ps\n({distance_m:.2f} m)')
+plt.title('Histogram with estimated object distance')
+plt.xlabel('Time difference (ps)')
 plt.ylabel('Count')
+plt.legend()
 plt.grid(True)
 plt.show()
