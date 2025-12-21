@@ -5,9 +5,7 @@ import neopixel_spi as neopixel
 import signal
 
 # --- LED 燈條配置 ---
-# 注意：使用 board.D18 通常對 NeoPixel 在 RPi 上最可靠。
-# 如果您堅持使用 GPIO 12，請將 PIN 設定為 board.D12。
-SPI_BUS = board.SPI() 
+SPI_BUS = board.SPI() #P19 GPIO10
 LED_COUNT      = 10        # 燈珠數量
 LED_BRIGHTNESS = 0.2       # 亮度 (0.0 到 1.0)
 LED_ORDER      = neopixel.GRB # 燈珠顏色順序 (通常是 GRB 或 RGB)
