@@ -61,6 +61,7 @@ def handle_pi_attack(data):
         
         # 廣播特效和狀態更新
         socketio.emit('spell_effect', {'label': str(label), 'from': 'pi'})
+        socketio.emit('vibrate_request', {'to': 'renesas', 'pattern': str(label)})
         socketio.emit('update_rpi_stats', rpi_player_stats)
         socketio.emit('update_renesas_stats', renesas_player_stats)
         
@@ -87,6 +88,7 @@ def handle_renesas_attack(data):
         
         # 廣播特效和狀態更新
         socketio.emit('spell_effect', {'label': str(label), 'from': 'renesas'})
+        socketio.emit('vibrate_request', {'to': 'pi', 'pattern': str(label)})
         socketio.emit('update_rpi_stats', rpi_player_stats)
         socketio.emit('update_renesas_stats', renesas_player_stats)
         
