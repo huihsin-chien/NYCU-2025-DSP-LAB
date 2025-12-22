@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Magic Duel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: #1a1a2e; color: white; font-family: 'ZCOOL KuaiLe', cursive;
+            margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center;
+        }
+        #battle-arena {
+            display: flex; justify-content: space-between; width: 90vw; height: 70vh;
+            margin-top: 50px; position: relative;
+        }
+        .character { text-align: center; width: 300px; transition: transform 0.1s; }
+        .character img { width: 100%; filter: drop-shadow(0 0 10px rgba(0,255,255,0.5)); }
+        
+        /* 狀態條設計 */
+        .status-box { width: 100%; background: rgba(0,0,0,0.5); border: 2px solid #444; border-radius: 10px; padding: 5px; }
+        .bar-label { font-size: 14px; margin-bottom: 2px; }
+        .bar-bg { width: 100%; height: 15px; background: #333; border-radius: 5px; overflow: hidden; }
+        .hp-fill { height: 100%; background: linear-gradient(90deg, #ff4b2b, #ff416c); width: 100%; transition: 0.5s; }
+        .mp-fill { height: 100%; background: linear-gradient(90deg, #00c6ff, #0072ff); width: 100%; transition: 0.5s; }
+
+        /* 特效層 */
+        #fx-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .spell-text {
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 60px; font-weight: bold; text-shadow: 0 0 20px gold;
+            opacity: 0; z-index: 100;
+        }
+
+        /* 受傷晃動動畫 */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            20% { transform: translate(-3px, 0px) rotate(-1deg); }
+            40% { transform: translate(3px, 2px) rotate(1deg); }
+            100% { transform: translate(1px, -1px) rotate(0deg); }
+        }
+        .damaged { animation: shake 0.5s linear infinite; filter: brightness(2) sepia(1) hue-rotate(-50deg) !important; }
+        .particle {
+            position: absolute; width: 10px; height: 10px; border-radius: 50%;
+            pointer-events: none; z-index: 99;
+        }
+
+        @keyframes p-fire { to { transform: translate(500px, -100px); opacity: 0; } }
+        @keyframes p-ice { to { transform: translate(500px, 100px); opacity: 0; } }
+        
+        /* 全螢幕震動：用於發招瞬間 */
+        @keyframes screen-shake {
+            0% { transform: translate(0,0); }
+            10% { transform: translate(-5px, -5px); }
+            30% { transform: translate(5px, 5px); }
+            50% { transform: translate(-5px, 5px); }
+            70% { transform: translate(5px, -5px); }
+            100% { transform: translate(0,0); }
+        }
+
+        /* 文字彈出效果：讓招式名稱更霸氣 */
+        @keyframes text-pop {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            20% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+            80% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+        }
+
+        /* 元素閃光：根據不同顏色閃爍螢幕邊緣 */
+        .flash-fire { box-shadow: inset 0 0 150px rgba(255, 69, 0, 0.8) !important; }
+        .flash-ice { box-shadow: inset 0 0 150px rgba(0, 191, 255, 0.8) !important; }
+        .flash-earth { box-shadow: inset 0 0 150px rgba(34, 139, 34, 0.8) !important; }
+        .flash-thunder { box-shadow: inset 0 0 150px rgba(148, 0, 211, 0.8) !important; }
+
+        /* 應用動畫的 Class */
+        .animate-shake { animation: screen-shake 0.4s ease-in-out; }
+        .animate-text { animation: text-pop 2s forwards; }
+        
+        /* 火焰效果：向敵人方向噴射的逼真火焰 */
+        .fire-particle {
+            position: absolute; border-radius: 50%; pointer-events: none;
+            box-shadow: 0 0 20px currentColor;
+            animation: fire-spray 2s ease-out forwards;
+        }
+        .fire-particle.core {
+            background: radial-gradient(circle, #ffff00, #ff6600, #ff0000);
+            width: 25px; height: 25px;
+        }
+        .fire-particle.mid {
+            background: radial-gradient(circle, #ffaa00, #ff4400, transparent);
+            width: 35px; height: 35px;
+            filter: blur(2px);
+        }
+        .fire-particle.outer {
+            background: radial-gradient(circle, #ff6600, #cc0000, transparent);
+            width: 50px; height: 50px;
+            filter: blur(4px);
+        }
+        @keyframes fire-spray {
+            0% { opacity: 1; filter: brightness(1); }
+            50% { opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; filter: brightness(0); }
+        }
+
+        /* 冰晶效果 - 寒冰星辰 */
+        .ice-particle {
+            position: absolute; border-radius: 50%; pointer-events: none;
+            animation: ice-drift 2.2s ease-out forwards;
+        }
+        .ice-particle.core {
+            background: radial-gradient(circle, #66ffff, #00aaff, #0077ff);
+            width: 30px; height: 30px;
+            box-shadow: 0 0 15px rgba(102, 255, 255, 0.8);
+        }
+        .ice-particle.mid {
+            background: radial-gradient(circle, #44ffff, #00ccff, transparent);
+            width: 45px; height: 45px;
+            filter: blur(2px);
+            box-shadow: 0 0 20px rgba(68, 255, 255, 0.6);
+        }
+        .ice-particle.outer {
+            background: radial-gradient(circle, #00ddff, transparent);
+            width: 65px; height: 65px;
+            filter: blur(4px);
+            box-shadow: 0 0 25px rgba(0, 221, 255, 0.3);
+        }
+        @keyframes ice-drift {
+            0% { opacity: 1; transform: translate(0, 0) scale(1); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); }
+        }
+
+        /* 大地裂紋效果 - 大地崩裂 */
+        .earth-particle {
+            position: absolute; pointer-events: none;
+            animation: earth-erupt 2.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        .earth-particle.rock {
+            background: radial-gradient(circle, #8b6f47, #664422, #442211);
+            border: 2px solid #5a4a2a;
+            border-radius: 30%;
+            box-shadow: 0 0 10px rgba(139, 111, 71, 0.8), inset -2px -2px 5px rgba(0,0,0,0.5);
+        }
+        .earth-particle.dust {
+            background: radial-gradient(circle, #d4a574, #8b6f47, transparent);
+            border-radius: 50%;
+            filter: blur(3px);
+            box-shadow: 0 0 15px rgba(212, 165, 116, 0.5);
+        }
+        @keyframes earth-erupt {
+            0% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0) rotate(var(--rot)); }
+        }
+
+        /* 閃電效果改進 - 雷鳴亂流 */
+        .lightning-bolt {
+            position: absolute; pointer-events: none;
+            animation: lightning-crack 0.5s ease-out forwards;
+        }
+        .lightning-bolt.strike {
+            width: 8px; background: linear-gradient(90deg, transparent, #ffff99, #ffffff, #ffff99, transparent);
+            box-shadow: 0 0 30px #00ffff, 0 0 60px #0099ff;
+        }
+        .lightning-bolt.glow {
+            border-radius: 50%;
+            background: radial-gradient(circle, #ffffff, #00ffff, transparent);
+            filter: blur(8px);
+            opacity: 0.6;
+        }
+        @keyframes lightning-crack {
+            0% { opacity: 1; filter: brightness(2); }
+            50% { opacity: 1; }
+            100% { opacity: 0; filter: brightness(0.5); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Magic Battle</h1>
+    <div style="margin-top: 20px;">
+        <button onclick="resetGame()" style="background: #444; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 5px;">
+            RESET
+        </button>
+    </div>
+    
+    <div id="battle-arena">
+        <div id="p1" class="character">
+            <h3>Renesas the Guardian</h3>
+            <div class="status-box">
+                <div class="bar-label">HP</div>
+                <div class="bar-bg"><div id="p1-hp" class="hp-fill"></div></div>
+                <div class="bar-label">MP</div>
+                <div class="bar-bg"><div id="p1-mp" class="mp-fill"></div></div>
+                <button onclick="renesasAttack('0')" style="margin-top:10px">烈焰 (測試)</button>
+            </div>
+            <img src="/static/images/pikachu.png" alt="Renesas">
+        </div>
+
+        <div id="fx-layer"><div id="spell-announcement" class="spell-text"></div></div>
+
+        <div id="p2" class="character">
+            <h3>Raspberry Pi Wizard</h3>
+            <div class="status-box">
+                <div class="bar-label">HP</div>
+                <div class="bar-bg"><div id="p2-hp" class="hp-fill"></div></div>
+                <div class="bar-label">MP</div>
+                <div class="bar-bg"><div id="p2-mp" class="mp-fill"></div></div>
+            </div>
+            <img src="/static/images/bulbasaur.png" alt="RaspberryPi">
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        const spellNames = { "0": "Fireball", "1": "Ice Attack", "2": "Earthquake", "3": "Thunderstorm" };
+        const spellSounds = {
+            "0": new Audio('/static/sounds/fireball.wav'),
+            "1": new Audio('/static/sounds/iceball.wav'),
+            "2": new Audio('/static/sounds/earthquake.wav'),
+            "3": new Audio('/static/sounds/thunder.wav'),
+        };
+
+        // 重置遊戲
+        function resetGame() { 
+            socket.emit('reset_game'); 
+        }
+
+        // 瑞薩手動攻擊測試
+        function renesasAttack(label) { 
+            socket.emit('renesas_cast_spell', { label: label }); 
+        }
+
+        // 更新數據與處理受擊
+        socket.on('update_rpi_stats', (data) => {
+            document.getElementById('p2-hp').style.width = data.hp + "%";
+            document.getElementById('p2-mp').style.width = data.mp + "%";
+        });
+        
+        socket.on('update_renesas_stats', (data) => {
+            document.getElementById('p1-hp').style.width = data.hp + "%";
+            document.getElementById('p1-mp').style.width = data.mp + "%";
+        });
+
+        socket.on('spell_effect', (data) => {
+            const el = document.getElementById('spell-announcement');
+            const arena = document.body;
+            
+            // 1. 設定文字內容與啟動文字動畫
+            el.innerText = spellNames[data.label];
+            el.className = 'spell-text animate-text'; // 重置動畫
+
+            // 2. 根據招式加上對應的閃光 Class
+            const flashClasses = { "0": "flash-fire", "1": "flash-ice", "2": "flash-earth", "3": "flash-thunder" };
+            const flashClass = flashClasses[data.label];
+            
+            arena.classList.add('animate-shake'); // 畫面震動
+            arena.classList.add(flashClass);      // 邊緣閃光
+            spawnMagic(data.label, data.from);   // 產生元素特效
+            
+            // 3. 播放對應音效
+            if(spellSounds[data.label]) {
+                spellSounds[data.label].currentTime = 0; // 從頭播放
+                spellSounds[data.label].play();
+            }
+
+            // 4. 特效結束後移除 Class (以便下次觸發)
+            setTimeout(() => {
+                arena.classList.remove('animate-shake');
+                arena.classList.remove(flashClass);
+                el.className = 'spell-text'; 
+            }, 2000);
+        });
+
+        function spawnMagic(label, from) {
+            const arena = document.getElementById('fx-layer');
+            const startX = (from === 'pi') ? window.innerWidth * 0.8 : window.innerWidth * 0.2;
+            const startY = window.innerHeight * 0.5;
+
+            if (label === "0") { // 火焰 fireball
+                const targetX = (from === 'pi') ? window.innerWidth * 0.2 : window.innerWidth * 0.8;
+                // 核心火焰粒子 (30 個)
+                for (let i = 0; i < 30; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'fire-particle core';
+                    const delay = (Math.random() - 0.5) * 0.3;
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 120;
+                    const wanderX = (Math.random() - 0.5) * 80;
+                    const wanderY = (Math.random() - 0.5) * 80;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.animationDelay = delay + 's';
+                    p.style.color = ['#ffff00', '#ffaa00', '#ff6600'][Math.floor(Math.random() * 3)];
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2000 + delay * 1000);
+                }
+                // 中層火焰粒子 (20 個)
+                for (let i = 0; i < 20; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'fire-particle mid';
+                    const delay = (Math.random() - 0.5) * 0.4;
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 150;
+                    const wanderX = (Math.random() - 0.5) * 100;
+                    const wanderY = (Math.random() - 0.5) * 100;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.animationDelay = delay + 's';
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2000 + delay * 1000);
+                }
+                // 外層火焰粒子 (10 個)
+                for (let i = 0; i < 10; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'fire-particle outer';
+                    const delay = (Math.random() - 0.5) * 0.5;
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 180;
+                    const wanderX = (Math.random() - 0.5) * 120;
+                    const wanderY = (Math.random() - 0.5) * 120;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.animationDelay = delay + 's';
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2000 + delay * 1000);
+                }
+            } else if (label === "1") { // 冰晶 (寒冰星辰)
+                const targetX = (from === 'pi') ? window.innerWidth * 0.2 : window.innerWidth * 0.8;
+                // 核心冰晶粒子 (25 個)
+                for (let i = 0; i < 25; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'ice-particle core';
+                    const delay = (Math.random() - 0.5) * 0.2;
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 80;
+                    const wanderX = (Math.random() - 0.5) * 30;
+                    const wanderY = Math.random() * 60 - 30;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.animationDelay = delay + 's';
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2200 + delay * 1000);
+                }
+                // 中層冰晶粒子 (18 個)
+                for (let i = 0; i < 18; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'ice-particle mid';
+                    const delay = (Math.random() - 0.5) * 0.3;
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 100;
+                    const wanderX = (Math.random() - 0.5) * 40;
+                    const wanderY = Math.random() * 80 - 40;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.animationDelay = delay + 's';
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2200 + delay * 1000);
+                }
+                // 外層冰晶粒子 (8 個)
+                for (let i = 0; i < 8; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'ice-particle outer';
+                    const delay = (Math.random() - 0.5) * 0.4;
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 120;
+                    const wanderX = (Math.random() - 0.5) * 50;
+                    const wanderY = Math.random() * 100 - 50;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.animationDelay = delay + 's';
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2200 + delay * 1000);
+                }
+            } else if (label === "2") { // 土石 (大地崩裂)
+                const targetX = (from === 'pi') ? window.innerWidth * 0.2 : window.innerWidth * 0.8;
+                // 岩石塊粒子 (12 個)
+                for (let i = 0; i < 12; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'earth-particle rock';
+                    const size = 25 + Math.random() * 40;
+                    p.style.width = size + 'px'; p.style.height = size + 'px';
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 200 + 50;
+                    const wanderX = (Math.random() - 0.5) * 120;
+                    const wanderY = Math.random() * 150;
+                    const rotation = Math.random() * 360;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.setProperty('--rot', rotation + 'deg');
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2300);
+                }
+                // 塵埃粒子 (30 個)
+                for (let i = 0; i < 30; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'earth-particle dust';
+                    const size = 15 + Math.random() * 30;
+                    const delay = Math.random() * 0.2;
+                    p.style.width = size + 'px'; p.style.height = size + 'px';
+                    p.style.left = startX + 'px'; p.style.top = startY + 'px';
+                    const offsetX = targetX - startX;
+                    const offsetY = (Math.random() - 0.5) * 220 + 80;
+                    const wanderX = (Math.random() - 0.5) * 150;
+                    const wanderY = Math.random() * 180;
+                    p.style.setProperty('--tx', (offsetX + wanderX) + 'px');
+                    p.style.setProperty('--ty', (offsetY + wanderY) + 'px');
+                    p.style.setProperty('--rot', (Math.random() * 360) + 'deg');
+                    p.style.animationDelay = delay + 's';
+                    arena.appendChild(p);
+                    setTimeout(() => p.remove(), 2300 + delay * 1000);
+                }
+            } else if (label === "3") { // 閃電 (雷鳴亂流)
+                const targetX = (from === 'pi') ? window.innerWidth * 0.2 : window.innerWidth * 0.8;
+                // 主閃電 (4 條)
+                for (let i = 0; i < 4; i++) {
+                    const l = document.createElement('div');
+                    l.className = 'lightning-bolt strike';
+                    const offsetX = (Math.random() - 0.5) * 100;
+                    l.style.left = (targetX + offsetX) + 'px';
+                    l.style.top = (startY - 250) + 'px';
+                    l.style.height = '300px';
+                    l.style.transform = `rotate(${(Math.random() - 0.5) * 30}deg) skewX(${(Math.random() - 0.5) * 10}deg)`;
+                    arena.appendChild(l);
+                    setTimeout(() => l.remove(), 500);
+                }
+                // 發光範圍 (6 個)
+                for (let i = 0; i < 6; i++) {
+                    const g = document.createElement('div');
+                    g.className = 'lightning-bolt glow';
+                    const size = 60 + Math.random() * 100;
+                    g.style.width = size + 'px'; g.style.height = size + 'px';
+                    g.style.left = (targetX + (Math.random() - 0.5) * 180) + 'px';
+                    g.style.top = (startY - 50 + Math.random() * 200) + 'px';
+                    const delay = Math.random() * 0.1;
+                    g.style.animationDelay = delay + 's';
+                    arena.appendChild(g);
+                    setTimeout(() => g.remove(), 500 + delay * 100);
+                }
+            }
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.9.6/lottie.min.js"></script>
+</body>
+</html>

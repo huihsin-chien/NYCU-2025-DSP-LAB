@@ -1,0 +1,3 @@
+LiDAR_data_cp/lidar_desk_Depth.raw,LiDAR_data_cp/lidar_desk_Depth.png
+LiDAR_data_cp/lidar_desk_2_Depth.raw,LiDAR_data_cp/lidar_desk_2_Depth.png
+LiDAR_data_cp/lidar_desk3_Depth.raw,LiDAR_data_cp/lidar_desk3_Depth.png
